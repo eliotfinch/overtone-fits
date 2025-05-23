@@ -189,7 +189,7 @@ class CurvedText(mtext.Text):
 
 
 file_path = (Path(__file__).parent)
-cce_dir = file_path / '../cce_data'
+cce_dir = file_path / '../data/cce_data'
 
 # For convenience there is a file in the cce_data directory that contains
 # useful information about each of the simulations
