@@ -188,7 +188,7 @@ class CurvedText(mtext.Text):
             rel_pos += w-used
 
 
-file_path = (Path(__file__).parent)
+file_path = Path(__file__).parent
 cce_dir = file_path / '../data/cce_data'
 
 # For convenience there is a file in the cce_data directory that contains
@@ -273,40 +273,38 @@ def load_cce_data(
         zero_time=(2, 2)
     )
 
-    sim_info['h'] = h
-    sim_info['times'] = times
     sim_info['metadata'] = metadata
     sim_info['sim'] = sim
 
     return sim_info
 
 
-def get_mode_list(N: int, additional_modes: list = []):
+def get_mode_list(Nmax: int, additional_modes: list = []):
     """
-    Get a list of lists of the first k overtones of the 220 mode for 0<=k<=N.
-    Adds any additional modes if desired.
+    Get a list of lists of the first k overtones of the 220 mode for
+    0<=k<=Nmax. Adds any additional modes if desired.
     """
     return [
-        [(2, 2, n, 1) for n in range(Np)] + additional_modes
-        for Np in range(1, N+2)
+        [(2, 2, n, 1) for n in range(N)] + additional_modes
+        for N in range(1, Nmax+2)
     ]
 
 
 def generate_mismatch_curve(
         ID: int,
-        N: int,
+        Nmax: int,
         cce_catalog: list = cce_catalog,
         cce_dir: str = cce_dir,
         additional_modes=[]
 ):
     """
-    Generate the mismatch curves for N modes for a given simulation.
+    Generate the mismatch curves for each N up to Nmax for a given simulation.
 
     Parameters
     ----------
     ID : int OR dict
         The ID number of the simulation or the simulation info as a dictionary
-    N : int
+    Nmax : int
         The maximum number of overtones to be fitted.
     cce_catalog : list (optional)
         List of dictionaries with properties of each CCE sim.
@@ -350,10 +348,10 @@ def generate_mismatch_curve(
     # Check whether the mismatch has already been calculated (save time!)
     if (
         'mm_lists' not in sim_info.keys() or
-        ('mm_lists' in sim_info.keys() and len(sim_info['mm_lists']) < N)
+        ('mm_lists' in sim_info.keys() and len(sim_info['mm_lists']) < Nmax)
     ):
         sim_info['mm_lists'] = []
-        mode_list = get_mode_list(N, additional_modes)
+        mode_list = get_mode_list(Nmax, additional_modes)
         for i, modes in enumerate(mode_list):
             # Create mismatch curve. There is a function in qnmfits that
             # automatically performs a ringdown fit for an array of start
@@ -375,20 +373,21 @@ def generate_mismatch_curve(
     return sim_info
 
 
-def t0N_finder(
+def t0NM_finder(
         ID,
-        N: int,
+        Nmax: int,
         cce_catalog: list = cce_catalog,
         cce_dir: str = cce_dir
 ):
     """
-    Finds the locations of t0N for a simulation.
+    Finds the locations of t0N for a simulation, based on the "knee" of the
+    mismatch curve.
 
     Parameters
     ----------
     ID : int or dict
         The ID number of the simulation or the simulation info as a dictionary
-    N : int
+    Nmax : int
         Number of overtones you want t0 for
     cce_catalog : list (optional)
         List of dictionaries with properties of each CCE sim.
@@ -420,16 +419,20 @@ def t0N_finder(
     """
     # Check whether the mismatch curve has already been calculated, calculates
     # it otherwise
-    if type(ID) is dict and 't0_list' in ID.keys() and len(ID['t0_list']) >= N:
+    if (
+        type(ID) is dict
+        and 't0_list' in ID.keys()
+        and len(ID['t0_list']) >= Nmax
+    ):
         sim_info = ID
         return sim_info
     if not (
-        type(ID) is dict and
-        'mm_lists' in ID.keys() and
-        len(ID['mm_lists']) >= N
+        type(ID) is dict
+        and 'mm_lists' in ID.keys()
+        and len(ID['mm_lists']) >= Nmax
     ):
         sim_info = generate_mismatch_curve(
-            ID, N, cce_catalog=cce_catalog, cce_dir=cce_dir
+            ID, Nmax, cce_catalog=cce_catalog, cce_dir=cce_dir
         )
     else:
         sim_info = ID
@@ -471,6 +474,44 @@ def t0N_finder(
 sim_path = cce_dir / 'sim_info_allN.pkl'
 with open(sim_path,'rb') as fp:
     sim_info_allN = pickle.load(fp)
+
+
+def t0NE_finder(path:str, prominence:float = .1, return_y = True):
+    """Finds the values of t0_E from the file path for a dataset."""
+    # Blank lists to add to
+    t0NE=[]
+    epsilons = []
+
+    #read in data and rget rid of pandas column number artifact
+    data = pd.read_csv(path)
+    del data['Unnamed: 0']
+
+    # make the data keys numbers instead of strings
+    keys_float=[]
+    for key in data.keys():
+        try:
+            keys_float.append(int(key))
+        except ValueError:
+            keys_float.append(key)
+    data.columns=keys_float
+
+    # Iterate through all keys
+    for key in data.keys():
+
+    # Avoid the t column
+        if type(key)==str:
+            continue
+        
+        peaks = find_peaks(-np.log(np.array(data[key])),prominence=prominence)[0]
+        # Find the actual minima, not the noise
+        mins = peaks[data[key][peaks]<0.01]
+        t0NE.append(data['t'][mins[0]])
+        # also return
+        epsilons.append(data[key][mins[0]])
+    if return_y:
+        return [[i,j] for i,j in zip(t0NE, epsilons)]
+    return t0NE
+
 
 def injection(ID, N, additional_modes=[], data_location=sim_path, returnC = False, tref=None):
 
@@ -609,38 +650,4 @@ def sort_paths(list):
 
 
 
-def t0NE_finder(path:str, prominence:float = .1, return_y = True):
-    """Finds the values of t0_E from the file path for a dataset."""
-    # Blank lists to add to
-    t0NE=[]
-    epsilons = []
 
-    #read in data and rget rid of pandas column number artifact
-    data = pd.read_csv(path)
-    del data['Unnamed: 0']
-
-    # make the data keys numbers instead of strings
-    keys_float=[]
-    for key in data.keys():
-        try:
-            keys_float.append(int(key))
-        except ValueError:
-            keys_float.append(key)
-    data.columns=keys_float
-
-    # Iterate through all keys
-    for key in data.keys():
-
-    # Avoid the t column
-        if type(key)==str:
-            continue
-        
-        peaks = find_peaks(-np.log(np.array(data[key])),prominence=prominence)[0]
-        # Find the actual minima, not the noise
-        mins = peaks[data[key][peaks]<0.01]
-        t0NE.append(data['t'][mins[0]])
-        # also return
-        epsilons.append(data[key][mins[0]])
-    if return_y:
-        return [[i,j] for i,j in zip(t0NE, epsilons)]
-    return t0NE
