@@ -471,11 +471,6 @@ def t0NM_finder(
     return sim_info
 
 
-sim_path = cce_dir / 'sim_info_allN.pkl'
-with open(sim_path,'rb') as fp:
-    sim_info_allN = pickle.load(fp)
-
-
 def t0NE_finder(path:str, prominence:float = .1, return_y = True):
     """Finds the values of t0_E from the file path for a dataset."""
     # Blank lists to add to
@@ -513,59 +508,109 @@ def t0NE_finder(path:str, prominence:float = .1, return_y = True):
     return t0NE
 
 
-def injection(ID, N, additional_modes=[], data_location=sim_path, returnC = False, tref=None):
+def injection(
+        ID,
+        N,
+        additional_modes=[],
+        returnC=False,
+        tref=None
+):
+    """
+    Generate a ringdown injection for a given simulation ID and number of
+    overtones.
 
-    """Create an injection waveform from N amplitudes with CCE ID."""
+    Parameters
+    ----------
+    ID : int
+        The ID number of the simulation.
+    N : int
+        The number of overtones to fit.
+    additional_modes : list (optional)
+        A list of additional modes to add to the fit. Default is an empty list.
+    returnC : bool (optional)
+        If True, return the C and omega values of the fit. Default is False.
+    tref : float (optional)
+        The time at which the fit is performed. If None, the t0 as determined
+        by the mismatch curves will be used.
 
-    try:
-        sim_info=sim_info_allN[ID]
-    except NameError:
-        with open(data_location,'rb') as fp:
-             sim_info_allN = pickle.load(fp)
-        sim_info=sim_info_allN[ID]
-    # generate the modes
-    modes = [(2,2,n,1) for n in range(N+1)]+additional_modes
-    sim=sim_info['sim']
+    Returns
+    -------
+    injection_info : dict
+        A dictionary containing the injection information. Keys:
+            'name' : str
+                The name of the injection.
+            'metadata' : dict
+                The metadata for the remnant.
+            'sim' : qnmfits.Custom object
+                The simulation as a qnmfits object.
+    C : ndarray (optional)
+        The C values of the fit, if returnC is True.
+    omega : ndarray (optional)
+        The omega values of the fit, if returnC is True.
+    """
+
+    # Get the simulation data
+    sim_info = load_cce_data(ID)
+    sim = sim_info['sim']
+
+    # List of QNMs to fit
+    modes = [(2, 2, n, 1) for n in range(N+1)] + additional_modes
+
+    # If tref is None, use the t0 as determined by the mismatch curves
     if tref is None:
-        t0=sim_info['t0_list'][N][0]
+        sim_info = t0NM_finder(
+            sim_info, N,
+        )
+        t0 = sim_info['t0_list'][N][0]
     else:
         t0 = tref
+
     # Perform the fit
     best_fit = qnmfits.ringdown_fit(
         sim.times,
-        sim.h[2,2],
+        sim.h[2, 2],
         modes,
         Mf=sim.Mf,
         chif=sim.chif_mag,
-        t0=t0
+        t0=t0,
+        t0_method='closest'
     )
 
-    injection = copy.deepcopy(sim_info)
+    injection = best_fit['model']
     injection_times = best_fit['model_times']
-    t0=sim_info['t0_list'][N][0]
-    T=100
     C = best_fit['C']
-    omega = best_fit["frequencies"]
+    omega = best_fit['frequencies']
 
-    for key in sim.h.keys():
-        # Get rid of all modes except [2,2]
-        del injection['sim'].h[key] 
+    injection_dict = {}
+    for m in range(-2, 2+1):
+        if m == 2:
+            injection_dict[(2, 2)] = injection
+        else:
+            injection_dict[(2, m)] = np.zeros_like(injection)
 
-    # Get the injection to 
-    injection['sim'].h[2,2] = best_fit['model']
-    injection['sim'].times = injection_times
+    injection_info = {}
+    injection_info['name'] = f'Injection_{ID}_N{N}' + ''.join(
+        [f'_{m[0]}{m[1]}{m[2]}{m[3]}' for m in additional_modes]
+    )
 
+    sim = qnmfits.Custom(
+        injection_times,
+        injection_dict,
+        sim_info['metadata'],
+        # zero_time=(2, 2)
+    )
 
-    # Get rid of or change wrong/unuseful keys 
-    del injection['url']
-    injection['name']='Injection'
-    del injection['mm_lists']
-    del injection['t0_list']
+    injection_info['metadata'] = sim_info['metadata']
+    injection_info['sim'] = sim
+
     if not returnC:
-        return injection 
+        return injection_info
     else:
-        return injection, C, omega
+        return injection_info, C, omega
 
+
+with open(cce_dir / 'sim_info_allN.pkl', 'rb') as f:
+    sim_info_allN = pickle.load(f)
 
 def find_amplitude(ID:int, N_overtone:int, N_fit: int,sim_info_allN=sim_info_allN,t0N='t0N'):
     r"""Return the amplitude of the (2,2,N_overtone) QNM (adjusted to tref=0) 
