@@ -200,7 +200,8 @@ with open(cce_dir / 'cce-catalog.json', 'r') as f:
 def load_cce_data(
         ID: int,
         cce_catalog: list = cce_catalog,
-        cce_dir: str = cce_dir
+        cce_dir: str = cce_dir,
+        lev: int = 5
 ):
     """
     Load the CCE data for a given simulation ID.
@@ -213,6 +214,8 @@ def load_cce_data(
         List of dictionaries with properties of each CCE sim.
     cce_dir : str (optional)
         The directory in which the CCE data can be found.
+    lev : int (optional)
+        The resolution level of the simulation to be used. Default is 5.
 
     Returns
     -------
@@ -247,7 +250,7 @@ def load_cce_data(
         "_superrest.pickle"
     )
     with open(
-        cce_dir / f"{sim_info['name']}" / 'Lev5' / data_filename, 'rb'
+        cce_dir / f"{sim_info['name']}" / f'Lev{lev}' / data_filename, 'rb'
     ) as f:
         h = pickle.load(f)
 
@@ -257,7 +260,7 @@ def load_cce_data(
         "_superrest.json"
     )
     with open(
-        cce_dir / f"{sim_info['name']}" / 'Lev5' / metadata_filename, 'r'
+        cce_dir / f"{sim_info['name']}" / f'Lev{lev}' / metadata_filename, 'r'
     ) as f:
         metadata = json.load(f)
 
