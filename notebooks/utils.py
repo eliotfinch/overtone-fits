@@ -1,10 +1,8 @@
 import numpy as np
-import pandas as pd
 
 import json
 import pickle
 import qnmfits
-import copy
 import math
 
 from scipy.signal import find_peaks
@@ -417,15 +415,15 @@ def t0NM_finder(
                 The simulation as a qnmfits object.
             'mm_list' : ndarray
                 Array of the mismatches at each timestep.
-            't0_list' : list
-                List of of [t0N, MM(t0N)] for each N.
+            't0M_list' : list
+                List of [t0N, MM(t0N)] for each N.
     """
     # Check whether the mismatch curve has already been calculated, calculates
     # it otherwise
     if (
         type(ID) is dict
-        and 't0_list' in ID.keys()
-        and len(ID['t0_list']) >= Nmax
+        and 't0M_list' in ID.keys()
+        and len(ID['t0M_list']) >= Nmax
     ):
         sim_info = ID
         return sim_info
@@ -470,45 +468,176 @@ def t0NM_finder(
 
         t0N_list.append([kneedle.knee, kneedle.knee_y])
 
-    sim_info['t0_list'] = t0N_list
+    sim_info['t0M_list'] = t0N_list
     return sim_info
 
 
-def t0NE_finder(path:str, prominence:float = .1, return_y = True):
-    """Finds the values of t0_E from the file path for a dataset."""
-    # Blank lists to add to
-    t0NE=[]
-    epsilons = []
+def generate_epsilon_curve(
+        ID: int,
+        Nmax: int,
+        cce_catalog: list = cce_catalog,
+        cce_dir: str = cce_dir,
+        additional_modes=[]
+):
+    """
+    Generate the epsilon curves for each N up to Nmax for a given simulation.
 
-    #read in data and rget rid of pandas column number artifact
-    data = pd.read_csv(path)
-    del data['Unnamed: 0']
+    Parameters
+    ----------
+    ID : int OR dict
+        The ID number of the simulation or the simulation info as a dictionary
+    Nmax : int
+        The maximum number of overtones to be fitted.
+    cce_catalog : list (optional)
+        List of dictionaries with properties of each CCE sim.
+    cce_dir : str (optional)
+        The directory in which the CCE data can be found.
+    additional_modes : list (optional)
+        Any additional modes which should be added to the simulation. Default
+        is for none to be added.
 
-    # make the data keys numbers instead of strings
-    keys_float=[]
-    for key in data.keys():
-        try:
-            keys_float.append(int(key))
-        except ValueError:
-            keys_float.append(key)
-    data.columns=keys_float
+    Returns
+    -------
+    sim_info : dictionary
+        Keys:
+            'name' : str
+                The simulation name.
+            'preferred_R' : float
+                The preferred radius for the simulation.
+            'url' : str
+                Link to the simulation on zenodo.org
+            'h' : ndarray
+                A time series of the strain.
+            'times' : ndarray
+                Array of the times the simulation took place over.
+            'metadata' : dict
+                Provides the metadata for the remnant
+            'sim' : qnmfits.Custom object
+                The simulation as a qnmfits object.
+            'eps_list' : ndarray
+                Array of the epsilons at each timestep.
+    """
+    if type(ID) is int:
+        sim_info = load_cce_data(ID, cce_catalog, cce_dir)
+    else:
+        assert type(ID) is dict, (
+            "Check the stored value of ID, or input ID as an int to load data."
+        )
+        sim_info = ID
+    sim = sim_info['sim']
+    t0_array = sim.times[(sim.times > -30) & (sim.times < 80)]
 
-    # Iterate through all keys
-    for key in data.keys():
+    # Check whether epsilon has already been calculated
+    if (
+        'eps_lists' not in sim_info.keys() or
+        ('eps_lists' in sim_info.keys() and len(sim_info['eps_lists']) < Nmax)
+    ):
+        sim_info['eps_lists'] = []
+        mode_list = get_mode_list(Nmax, additional_modes)
+        for i, modes in enumerate(mode_list):
+            # Create epsilon curve
+            print(f'\rCalculating for n = {i}')
+            eps_list = []
+            for t0 in t0_array:
+                eps_list.append(
+                    qnmfits.calculate_epsilon(
+                        sim.times,
+                        sim.h[2, 2],
+                        modes,
+                        Mf=sim.Mf,
+                        chif=sim.chif_mag,
+                        t0=t0,
+                        t0_method='closest'
+                    )[0]
+                )
+            sim_info['eps_lists'].append(eps_list)
+    else:
+        print("epsilon lists already calculated.")
 
-    # Avoid the t column
-        if type(key)==str:
-            continue
-        
-        peaks = find_peaks(-np.log(np.array(data[key])),prominence=prominence)[0]
+    return sim_info
+
+
+def t0NE_finder(
+        ID,
+        Nmax: int,
+        cce_catalog: list = cce_catalog,
+        cce_dir: str = cce_dir,
+        prominence: float = .1
+):
+    """
+    Finds the locations of t0N for a simulation, based on the minimum of the
+    epsilon curve.
+
+    Parameters
+    ----------
+    ID : int or dict
+        The ID number of the simulation or the simulation info as a dictionary
+    Nmax : int
+        Number of overtones you want t0 for
+    cce_catalog : list (optional)
+        List of dictionaries with properties of each CCE sim.
+    cce_dir : str (optional)
+        The directory in which the CCE data can be found.
+
+    Returns
+    -------
+    sim_info : dictionary
+        Keys:
+            'name' : str
+                The simulation name.
+            'preferred_R' : float
+                The preferred radius for the simulation.
+            'url' : str
+                Link to the simulation on zenodo.org
+            'h' : ndarray
+                A time series of the strain.
+            'times' : ndarray
+                Array of the times the simulation took place over.
+            'metadata' : dict
+                Provides the metadata for the remnant
+            'sim' : qnmfits.Custom object
+                The simulation as a qnmfits object.
+            'eps_list' : ndarray
+                Array of the epsilons at each timestep.
+            't0E_list' : list
+                List of [t0N, eps(t0N)] for each N.
+    """
+    # Check whether the epsilon curve has already been calculated, calculates
+    # it otherwise
+    if (
+        type(ID) is dict
+        and 't0E_list' in ID.keys()
+        and len(ID['t0E_list']) >= Nmax
+    ):
+        sim_info = ID
+        return sim_info
+    if not (
+        type(ID) is dict
+        and 'eps_lists' in ID.keys()
+        and len(ID['eps_lists']) >= Nmax
+    ):
+        sim_info = generate_epsilon_curve(
+            ID, Nmax, cce_catalog=cce_catalog, cce_dir=cce_dir
+        )
+    else:
+        sim_info = ID
+    sim = sim_info['sim']
+
+    t0_array = sim.times[(sim.times > -30) & (sim.times < 80)]
+
+    t0N_list = []
+    for eps_list in sim_info['eps_lists']:
+
+        peaks = find_peaks(
+            -np.log(np.array(eps_list)), prominence=prominence
+        )[0]
+
         # Find the actual minima, not the noise
-        mins = peaks[data[key][peaks]<0.01]
-        t0NE.append(data['t'][mins[0]])
-        # also return
-        epsilons.append(data[key][mins[0]])
-    if return_y:
-        return [[i,j] for i,j in zip(t0NE, epsilons)]
-    return t0NE
+        mins = peaks[np.array(eps_list)[peaks] < 0.01]
+        t0N_list.append([t0_array[mins[0]], eps_list[mins[0]]])
+
+    sim_info['t0E_list'] = t0N_list
+    return sim_info
 
 
 def injection(
@@ -610,92 +739,3 @@ def injection(
         return injection_info
     else:
         return injection_info, C, omega
-
-
-with open(cce_dir / 'sim_info_allN.pkl', 'rb') as f:
-    sim_info_allN = pickle.load(f)
-
-def find_amplitude(ID:int, N_overtone:int, N_fit: int,sim_info_allN=sim_info_allN,t0N='t0N'):
-    r"""Return the amplitude of the (2,2,N_overtone) QNM (adjusted to tref=0) 
-    in a fit with N_fit overtones performed at t0 N_fit.
-    Parameters
-    ----------
-    ID : int
-        Identification number of the CCE waveform to be used for data
-    N_overtone : int
-        Function will return the amplitudes of the (2,2,N_overtone) QNM 
-    N_fit : int (optional)
-        Number of overtones to be used in the fit
-    t0N : str or float (optional)
-        Specifies Default is 't0N', in which case the fit time is used as t0_N. 
-    Returns
-    ----------
-    amplitude : float
-
-    """
-    # Make sure simulation dictionary exists, and has the right data in it 
-    try:
-        sim_info=sim_info_allN[ID]
-    except (KeyError):
-        print("Make sure the variable sim_info_allN contains the data loaded from sim_info_allN.pkl.")
-    assert 't0_list' in sim_info.keys(), "No t0 N data found."
-    assert  len(sim_info['t0_list'])>=N_fit, f"Expected {N_fit} $t_0^N$ values, got {len(sim_info['t0_list'])}."
-    assert N_overtone<=N_fit, "N_overtone must be less than or equal to N_fit"
-
-    tref=0
-    # Generate the list of modes to be used in the fit
-    modes = [(2,2,n,1) for n in range(N_fit+1)]
-
-    # Look up t0N, set variables for fit
-    if t0N == "t0N":
-        t0N = sim_info['t0_list'][N_fit][0]
-    if t0N!='t0N':
-        try:
-            t0N = float(t0N)
-        except TypeError:
-            print("t0N must be a number.")
-    sim = sim_info['sim']
-    data = sim.h[2,2]
-    times = sim.times
-    Mf=sim.Mf
-    chif=sim.chif_mag
-
-    # Perform a fit with the given start time and modes
-    best_fit = qnmfits.ringdown_fit(times, data, modes, Mf, chif, t0 = t0N)
-    omega = best_fit['frequencies'][N_overtone]
-    C = best_fit['C'][N_overtone]
-
-    # Adjust to tref = 0
-    adjust=np.exp(-1j*omega*(tref-t0N))
-    amplitude= np.abs(C*adjust) 
-
-    return amplitude
-    
-def find_delta_amplitude(ID:int,N_overtone:int,N_fit:int,sim_info_allN=sim_info_allN,t0N='t0N'):
-    """Find Delta A_(2,2,N_overtone)^N_fit. """
-    A220 = find_amplitude(ID, N_overtone, N_fit,sim_info_allN=sim_info_allN,t0N=t0N)
-    A22N=find_amplitude(ID, N_overtone, N_overtone,sim_info_allN=sim_info_allN,t0N=t0N)
-    return (A22N-A220)/A220
-
-
-def sort_paths(list):
-    """Puts all paths in a list in numerical order by file name. 
-        This function is probably not necessary (and probably 
-        could be executed more efficiently) but not having the paths 
-        sorted frustrates me."""
-    decorated=[]
-    for item in list:
-        start = item[::-1].index('/')
-        for num,i  in enumerate(item[-start:]):
-            try:
-                n = int(item[-start:][:num])
-            except ValueError:
-                if num!=0:
-                    break
-        decorated.append((n,item))
-    decorated.sort()
-    return [item for n, item in decorated]  
-
-
-
-
