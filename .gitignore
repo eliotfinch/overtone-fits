@@ -1,4 +1,7 @@
-data
+data/16801267
+data/emcee
+data/s2l2.dat
+*.pkl
 notebooks/figures
 
 # macOS
