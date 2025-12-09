@@ -1,5 +1,14 @@
 # overtone-fits
 
+## Running the code
+
+This code relies on the `qnmfits` package, which must be cloned from [`eliotfinch/qnmfits`](https://github.com/eliotfinch/qnmfits) and installed locally (note that this code is different to what is available on pip). See the README at the `qnmfits` repository for more information. Since we will be performing fits with large numbers of overtones, additional data must be downloaded via
+
+```python
+import qnmfits
+qnmfits.download_cook_data()
+```
+
 ## Figures in Coleman & Finch (2025)
 
 ### Fig. 1
