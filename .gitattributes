@@ -9,3 +9,5 @@ data/correlations/* filter=lfs diff=lfs merge=lfs -text
 data/correlations/** filter=lfs diff=lfs merge=lfs -text
 data/cce_data/* filter=lfs diff=lfs merge=lfs -text
 data/cce_data/** filter=lfs diff=lfs merge=lfs -text
+data/epsilon_curves/* filter=lfs diff=lfs merge=lfs -text
+data/epsilon_curves/** filter=lfs diff=lfs merge=lfs -text
