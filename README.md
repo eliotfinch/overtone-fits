@@ -13,6 +13,8 @@ qnmfits.download_cook_data()
 
 ## Figures in Coleman & Finch (2025)
 
+Below I detail which notebooks produce which figures in the paper.
+
 ### Fig. 1
 
 See [`notebooks/even_more_overtones.ipynb`](notebooks/even_more_overtones.ipynb).
