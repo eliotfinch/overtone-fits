@@ -5,3 +5,5 @@ data/Delta_t0_data_30_to_100.csv filter=lfs diff=lfs merge=lfs -text
 data/Delta_t0N_E.csv filter=lfs diff=lfs merge=lfs -text
 data/t0_data_30_to_100.csv filter=lfs diff=lfs merge=lfs -text
 data/t0N_E.csv filter=lfs diff=lfs merge=lfs -text
+data/correlations/* filter=lfs diff=lfs merge=lfs -text
+data/correlations/** filter=lfs diff=lfs merge=lfs -text
