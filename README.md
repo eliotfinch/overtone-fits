@@ -2,7 +2,9 @@
 
 ## Running the code
 
-This code relies on the `qnmfits` package, which must be cloned from [`eliotfinch/qnmfits`](https://github.com/eliotfinch/qnmfits) and installed locally (note that this code is different to what is available on pip). See the README at the `qnmfits` repository for more information. Since we will be performing fits with large numbers of overtones, additional data must be downloaded via
+This repository makes use of Git LFS to store the (superrest frame) waveform data and data products. With Git LFS installed, the repository can be pulled as normal.
+
+The code relies on the `qnmfits` package, which must be cloned from [`eliotfinch/qnmfits`](https://github.com/eliotfinch/qnmfits) and installed locally (note that this code is different to what is available on pip). See the README at the `qnmfits` repository for more information. Since we will be performing fits with large numbers of overtones, additional data must be downloaded via
 
 ```python
 import qnmfits
