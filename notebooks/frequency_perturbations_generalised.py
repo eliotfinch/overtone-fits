@@ -1,4 +1,4 @@
-#!/home/eliot.finch/ringdown/SURF24/.venv/bin/python
+#!/home/eliot.finch/ringdown/SURF24/env/bin/python
 
 import numpy as np
 import pandas as pd
