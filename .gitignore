@@ -1,6 +1,7 @@
 data/16801267
 data/emcee
 data/s2l2.dat
+data/epsilon_grids
 *.pkl
 notebooks/figures
 
